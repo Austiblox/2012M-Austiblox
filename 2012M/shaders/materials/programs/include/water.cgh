@@ -1,0 +1,71 @@
+
+
+/************* DATA STRUCTS **************/
+
+
+struct AppdataTerrain {
+    float3 Position	: POSITION;
+    float3 Normal	: NORMAL;
+    float2 UvHigh	: TEXCOORD0;
+    float2 UvLow	: TEXCOORD1;
+};
+
+/* data passed from vertex shader to pixel shader */
+struct WaterVertexOutput {
+    float4 HPosition     : POSITION;
+    float2 UvLayer1      : TEXCOORD0;
+    float2 UvLayer2      : TEXCOORD1;
+    float2 UvLow         : TEXCOORD2;
+    float3 LightingColor : COLOR0;
+};
+
+/*********** vertex shader ******/
+
+WaterVertexOutput WaterVS(AppdataTerrain IN,
+    uniform float4x4 WorldITXf, // our four standard "untweakable" xforms
+	uniform float4x4 WorldXf,
+	uniform float4x4 ViewIXf,
+	uniform float4x4 WvpXf,
+	uniform float4x4 WvXf,	
+    uniform float3 Lamp0Pos,
+    uniform float3 Lamp1Pos,
+    uniform float timeframe,
+    uniform float sintime,
+    uniform float3 ambientLight,
+    uniform float3 Lamp0Color,
+    uniform float3 Lamp1Color
+) {
+    WaterVertexOutput OUT = (WaterVertexOutput)0;
+		
+	float4 Po = float4(IN.Position.xyz,1);
+	float3 Pw = mul(WorldXf, Po).xyz;
+
+	float normalLength = abs(IN.Normal.x + IN.Normal.y + IN.Normal.z);
+	float speed = floor(normalLength);
+	float hasNonZeroFlow = saturate(speed);
+	float hasZeroFlow = 1 - hasNonZeroFlow;
+	
+	// encode: speed == 0 ? sintime : timeframe * speed
+	float textureOffset = (hasNonZeroFlow * timeframe * speed) +
+		hasZeroFlow * 0.125 * sintime;
+
+	// encode: speed == 0 ? (x + offset, y) : (x, y + offset)
+	float subsurfaceXCoord = IN.UvHigh.x - hasZeroFlow * 3 * textureOffset;
+	float subsurfaceYCoord = IN.UvHigh.y - hasNonZeroFlow * 3 * textureOffset;
+
+	float3 nNormal = normalize(IN.Normal);
+
+	float normalDotLamp0 = dot(nNormal, Lamp0Pos);
+	float normalDotLamp1 = dot(nNormal, Lamp1Pos);
+
+	float light0DotNormal = saturate( normalDotLamp0 );
+	float light1DotNormal = saturate( normalDotLamp1 );
+
+	OUT.HPosition = mul(WvpXf,Po);
+	OUT.UvLayer1 = float2(subsurfaceXCoord, subsurfaceYCoord);
+	OUT.UvLayer2 = float2(IN.UvHigh.x, IN.UvHigh.y - 4 * textureOffset);
+	OUT.UvLow = IN.UvLow;
+	OUT.LightingColor = light0DotNormal * Lamp0Color + light1DotNormal * Lamp1Color + ambientLight;
+
+	return OUT;
+}

@@ -1,0 +1,143 @@
+
+abstract material MegaClusterTemplate
+{
+	lod_distances 320.0
+	technique lod1
+	{
+		pass
+		{
+			ambient 0.5 0.5 0.5
+            diffuse 1.0 1.0 1.0
+			// mimic current wood shader limitation
+			max_lights 2
+
+			texture_unit
+			{
+				tex_coord_set 0
+				texture $tex_file_close
+		        filtering trilinear
+		        
+		        colour_op_ex source1 src_texture src_texture
+		        alpha_op_ex source1 src_texture src_texture
+			}
+			texture_unit
+			{
+				tex_coord_set 1
+				texture $tex_file_far
+		        filtering trilinear
+		        
+		        colour_op_ex blend_current_alpha src_current src_texture
+			}
+
+			texture_unit
+			{
+		        colour_op_ex modulate src_current src_diffuse
+			}
+		}
+	}
+}
+
+material MegaCluster_Low : MegaClusterTemplate {
+	set $tex_file_close textures/clustermipsclose.dds
+	set $tex_file_far textures/clustermipsfar.dds
+}
+
+material MegaCluster_Tiny : MegaClusterTemplate
+{
+	set $tex_file_close textures/clustermipsclose.dds
+	set $tex_file_far textures/clustermipsfar.dds
+}
+
+vertex_program WaterVPCG cg
+{
+	source materials/programs/water.cgfx
+	profiles vs_1_1
+	entry_point WaterVS
+}
+
+vertex_program WaterVPGLSL glsl
+{
+	source materials/programs/glsl/vert/water.vert
+	preprocessor_defines GLSL=1,GLSL_VERT=1
+}
+
+vertex_program WaterVP unified
+{
+	delegate WaterVPCG
+	delegate WaterVPGLSL
+}
+
+abstract technique BaseWaterTechnique
+{
+	pass 
+	{
+		ambient 0.5 0.5 0.5
+		diffuse 1.0 1.0 1.0
+		cull_hardware none
+		cull_software none
+		depth_bias -4.8 -0.6 // keep this in line with face decals
+
+		// mimic current wood shader limitation
+		max_lights 2
+
+		texture_unit {
+			texture textures/water_Subsurface.dds
+			tex_coord_set 0
+			colour_op_ex source1 src_texture src_texture
+		}
+			
+		texture_unit {
+			texture textures/water_Wave.dds
+			tex_coord_set 0
+			filtering trilinear
+			colour_op_ex blend_texture_alpha src_texture src_current 
+		}
+
+		texture_unit {
+			texture textures/water_Subsurface.dds
+			tex_coord_set 1
+			filtering trilinear
+			colour_op_ex blend_texture_alpha src_current src_texture
+		}
+			
+		texture_unit {
+			colour_op_ex modulate src_current src_diffuse
+		}		
+	}
+}
+
+material MegaCluster_Water
+{
+	technique CGWaterTechnique : BaseWaterTechnique {
+		pass 0
+		{
+			vertex_program_ref WaterVP
+			{
+				param_named_auto Lamp0Pos light_position_object_space 0
+				param_named_auto Lamp1Pos light_position_object_space 1
+				param_named_auto WvpXf worldviewproj_matrix
+				param_named_auto timeframe time_0_1 4
+				param_named_auto sintime sintime_0_2pi 4
+				param_named ambientLight float3 0.5 0.5 0.5
+				param_named_auto Lamp0Color light_diffuse_colour 0
+				param_named_auto Lamp1Color light_diffuse_colour 1
+			}
+		}
+	}
+
+	technique NoVertexShaded : BaseWaterTechnique
+	{
+		pass 0
+		{
+			specular 1.0 1.0 1.0 25 // keep this in line with ice
+			
+			texture_unit 0 {
+				scroll_anim 0 0.75
+			}
+			
+			texture_unit 1 {
+				scroll_anim 0 1
+			}
+		}
+	}
+}
